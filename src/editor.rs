@@ -187,24 +187,30 @@ impl Editor {
     fn rx(&self) -> usize { self.current_row().map_or(0, |r| r.cx2rx[self.cursor.x]) }
 
     /// Move the cursor following an arrow key (← → ↑ ↓).
-    fn move_cursor(&mut self, key: &AKey) {
+    fn move_cursor(&mut self, key: &Key) {
         match (key, self.current_row()) {
-            (AKey::Left, Some(row)) if self.cursor.x > 0 =>
+            (Key::Arrow(AKey::Left), Some(row)) if self.cursor.x > 0 =>
                 self.cursor.x -= row.get_char_size(row.cx2rx[self.cursor.x] - 1),
-            (AKey::Left, _) if self.cursor.y > 0 => {
+            (Key::Arrow(AKey::Left), _) if self.cursor.y > 0 => {
                 // ← at the beginning of the line: move to the end of the previous line. The x
                 // position will be adjusted after this `match` to accommodate the current row
                 // length, so we can just set here to the maximum possible value here.
                 self.cursor.y -= 1;
                 self.cursor.x = usize::MAX;
             }
-            (AKey::Right, Some(row)) if self.cursor.x < row.chars.len() =>
+            (Key::Arrow(AKey::Right), Some(row)) if self.cursor.x < row.chars.len() =>
                 self.cursor.x += row.get_char_size(row.cx2rx[self.cursor.x]),
-            (AKey::Right, Some(_)) => self.cursor.move_to_next_line(),
+            (Key::Arrow(AKey::Right), Some(_)) => self.cursor.move_to_next_line(),
             // TODO: For Up and Down, move self.cursor.x to be consistent with tabs and UTF-8
             //  characters, i.e. according to rx
-            (AKey::Up, _) if self.cursor.y > 0 => self.cursor.y -= 1,
-            (AKey::Down, Some(_)) => self.cursor.y += 1,
+            (Key::Arrow(AKey::Up), _) if self.cursor.y > 0 => self.cursor.y -= 1,
+            (Key::Arrow(AKey::Down), Some(_)) => self.cursor.y += 1,
+            (Key::CtrlArrow(AKey::Left), Some(row)) if self.cursor.x > 0 => {
+                self.cursor.x = row.get_word_start_position(row.rx2cx[row.cx2rx[self.cursor.x] - 1]);
+            }
+            (Key::CtrlArrow(AKey::Right), Some(row)) if self.cursor.x < row.chars.len() => {
+                self.cursor.x = row.get_word_end_position(self.cursor.x);
+            }
             _ => (),
         }
         self.update_cursor_x_position();
@@ -393,7 +399,7 @@ impl Editor {
         } else if self.cursor.y == self.rows.len() {
             // If the cursor is located after the last row, pressing backspace is equivalent to
             // pressing the left arrow key.
-            self.move_cursor(&AKey::Left);
+            self.move_cursor(&Key::Arrow(AKey::Left));
         }
     }
 
@@ -600,7 +606,7 @@ impl Editor {
 
         match key {
             // TODO: CtrlArrow should move to next word
-            Key::Arrow(arrow) | Key::CtrlArrow(arrow) => self.move_cursor(arrow),
+            Key::Arrow(_) | Key::CtrlArrow(_) => self.move_cursor(key),
             Key::Page(PageKey::Up) => {
                 self.cursor.y = self.cursor.roff.saturating_sub(self.screen_rows);
                 self.update_cursor_x_position();
@@ -615,7 +621,7 @@ impl Editor {
             Key::Char(BACKSPACE | DELETE_BIS) => self.delete_char(), // Backspace or Ctrl + H
             Key::Char(REMOVE_LINE) => self.delete_current_row(),
             Key::Delete => {
-                self.move_cursor(&AKey::Right);
+                self.move_cursor(&Key::Arrow(AKey::Right));
                 self.delete_char();
             }
             Key::Escape | Key::Char(REFRESH_SCREEN) => (),
@@ -910,8 +916,8 @@ mod tests {
         }
         editor.delete_char();
         assert_eq!(editor.rows[0].chars, "Hello".as_bytes());
-        editor.move_cursor(&AKey::Left);
-        editor.move_cursor(&AKey::Left);
+        editor.move_cursor(&Key::Arrow(AKey::Left));
+        editor.move_cursor(&Key::Arrow(AKey::Left));
         editor.delete_char();
         assert_eq!(editor.rows[0].chars, "Helo".as_bytes());
     }

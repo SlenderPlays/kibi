@@ -81,6 +81,42 @@ impl Row {
         self.rx2cx.iter().skip(rx + 1).map(|cx| cx - cx0).find(|d| *d > 0).unwrap_or(1)
     }
 
+    pub fn get_word_start_position(&self, cx: usize) -> usize {
+        // let cx0 = self.rx2cx[rx];
+        // Because of the 'skip', 'position' will return the index relative
+        // let offset = self.render.chars().rev().skip(nr_chars - rx - 1 + skip_separator).position(|c| !c.is_alphanumeric()).unwrap_or(1) - 1;
+        // cx0 - self.rx2cx[rx - offset] + skip_separator
+        //self.render.char_indices();
+        let nr_chars = self.chars.len();
+        if let Some((i, _)) = self.chars.iter().enumerate().rev()
+                                             .skip(nr_chars - cx - 1)
+                                             .skip_while(|&(_ , c)| is_sep(*c))
+                                             .skip_while(|&(_ , c)| !is_sep(*c))
+                                             .next() { i+1 } else { 0 }
+        // This crashes on utf8 chars
+        // let nr_chars = self.render.len();
+        // self.rx2cx[if let Some((i, _)) = self.render.char_indices().rev()
+        //                                      .skip(nr_chars - rx - 1)
+        //                                      .skip_while(|&(_ , c)| is_char_sep(c))
+        //                                      .skip_while(|&(_ , c)| !is_char_sep(c))
+        //                                      .next() { i+1 } else { 0 }]
+    }
+
+    pub fn get_word_end_position(&self, cx: usize) -> usize {
+        let nr_chars = self.chars.len();
+        if let Some((i, _)) = self.chars.iter().enumerate()
+                                             .skip(cx)
+                                             .skip_while(|&(_ , c)| is_sep(*c))
+                                             .skip_while(|&(_ , c)| !is_sep(*c))
+                                             .next() { i } else { nr_chars }
+        // let nr_chars = self.chars.len();
+        // self.rx2cx[self.chars.iter().enumerate()
+        //                                      .skip(rx)
+        //                                      .skip_while(|&(_ , c)| is_sep(*c))
+        //                                      .skip_while(|&(_ , c)| !is_sep(*c))
+        //                                      .next().unwrap_or((nr_chars, &b'_')).0]
+    }
+
     /// Update the syntax highlighting types of the row.
     fn update_syntax(&mut self, syntax: &SyntaxConf, mut hl_state: HlState) -> HlState {
         self.hl.clear();
@@ -213,5 +249,8 @@ impl Row {
 
 /// Return whether `c` is an ASCII separator.
 fn is_sep(c: u8) -> bool {
-    c.is_ascii_whitespace() || c == b'\0' || (c.is_ascii_punctuation() && c != b'_')
+    c.is_ascii_whitespace() || c == b'\0' || (c.is_ascii_punctuation() && c != b'_') || c == b'\t'
+}
+fn is_char_sep(c: char) -> bool {
+    c.is_ascii_whitespace() || c == '\0' || (c.is_ascii_punctuation() && c != '_')
 }
